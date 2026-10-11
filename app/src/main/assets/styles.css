@@ -114,3 +114,16 @@
 .gate-btns button:disabled{opacity:.45}
 
 .rst,#reset-all{border:0;background:#f1e6d4;color:#594536;border-radius:10px;padding:5px 12px;font-size:12px;font-weight:800;margin:0 0 10px}#reset-all{display:block;width:100%;padding:12px;font-size:14px;margin-top:14px;background:#f3d4d4}
+/* ===== وضع التعلم المتقدم: أزرار كبيرة، لون لكل نوع، صف واحد لكل نوع ===== */
+.lesson-tools{display:grid;gap:12px}
+.lesson-box h3{font-size:15px;margin:0 0 8px;color:#8a7466;letter-spacing:.5px}
+.lesson-box .hint{display:none}
+#harakat-grid{grid-template-columns:repeat(4,1fr)}
+#madd-grid{grid-template-columns:repeat(3,1fr)}
+#word-grid{grid-template-columns:repeat(3,1fr)}
+.mini-item{min-height:72px;font-size:32px;border-radius:18px;box-shadow:0 4px 0 #0002}
+.lb-harakat .mini-item{background:#ffd9e2;color:#7d3047}
+.lb-madd .mini-item{background:#d6ecff;color:#1f4f7a}
+.lb-words .word-item{min-height:72px;font-size:24px;background:#d8f3d4;color:#255b2b}
+.quiz-options{grid-template-columns:repeat(4,1fr)}
+.quiz-option{min-height:68px;font-size:28px}

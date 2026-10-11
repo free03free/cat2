@@ -57,14 +57,41 @@ def norm(t):
         t = t.replace(x, y)
     t = t.translate(str.maketrans("٠١٢٣٤٥٦٧٨٩", "0123456789"))
     t = re.sub(r"[^\u0621-\u064A0-9 ]", " ", t)
+    t = re.sub(r"[اه](?=\s|$)", "ه", t)
     return re.sub(r"\s+", " ", t).strip()
 
 def variants(c, num):
-    """الأرقام فقط: النموذج ينطق أحيانًا أوضح بلا سكون أو بلا تشكيل، فنجرّب الصيغ الثلاث ونختار ما يسمعه التحقق صحيحًا."""
-    if num is None: return [c]
+    """الأرقام والكلمات المفردة (أسماء الحروف وكلمات الصور): النموذج ينطق أحيانًا أوضح بلا سكون أو بلا تشكيل،
+    فنجرّب الصيغ الثلاث ونختار ما يسمعه التحقق صحيحًا. عبارات «حرف أَ، كرر» و«مد:» تبقى بتشكيلها الكامل."""
+    single = (" " not in c) and (":" not in c) and ("،" not in c) and not c.startswith("حرف") and not c.startswith("مد")
+    if num is None and not single: return [c]
     nodiac = re.sub("[\u064B-\u065F\u0670]", "", c)
     nosukun = c.replace("\u0652", "")
     return [c, nodiac, nosukun]
+
+# مقاطع الحرف مع الحركة أو المد (بَ، بِ، بُ، بْ، با، بو، بي): يُنطق المقطع وحده بلا أي تعليمات.
+# النموذج ينطق المقطع المنفرد بشكل رديء، فنولّد جملة حاملة ثم نقتطع آخر مقطع منها فقط.
+SYL = re.compile("^[\u0621-\u064A][\u064E\u064F\u0650\u0652\u0627\u0648\u064A]$")
+def carrier(c): return f"حرف {c}، كرر: {c}" if c[1] in "\u064E\u064F\u0650\u0652" else f"مد: {c}"
+
+def cut_last(s, sr, gap_ms=90):
+    fr = int(sr * 0.01); n = len(s) // fr
+    if n < 5: return s, False
+    e = np.sqrt((s[:n * fr].reshape(n, fr) ** 2).mean(axis=1))
+    act = e > max(float(e.max()) * 0.03, 1e-4)
+    idx = np.where(act)[0]
+    if len(idx) == 0: return s, False
+    end = int(idx[-1]); start = end; gap = 0; k = end
+    while k >= 0:
+        if act[k]: start = k; gap = 0
+        else:
+            gap += 1
+            if gap * 10 >= gap_ms: break
+        k -= 1
+    a = max(0, start * fr - int(sr * 0.04)); b = min(len(s), (end + 1) * fr + int(sr * 0.12))
+    seg = s[a:b].copy(); f = int(sr * 0.006)
+    if len(seg) > 2 * f: seg[:f] *= np.linspace(0, 1, f).astype(np.float32); seg[-f:] *= np.linspace(1, 0, f).astype(np.float32)
+    return seg, (0.12 <= (end + 1 - start) * 0.01 <= 1.2)
 
 def score(expected, n, got):
     g = norm(got).replace(" ", "")
@@ -123,12 +150,16 @@ def work(voice):
         best = None
         for attempt in range(1, (a.tries if rec else 1) + 1):
             g = sherpa_onnx.GenerationConfig(); g.sid = voice; g.speed = float(sp); g.num_steps = a.steps; g.extra = {"lang": "ar"}
-            vs = variants(c, num)
+            syl = bool(SYL.match(c))
+            vs = [carrier(c)] if syl else variants(c, num)
             r = tts.generate(vs[(attempt - 1) % len(vs)], g)
-            s = trim(np.asarray(r.samples, dtype=np.float32), r.sample_rate)
+            raw = np.asarray(r.samples, dtype=np.float32)
+            if syl: s, okdur = cut_last(raw, r.sample_rate)
+            else: s, okdur = trim(raw, r.sample_rate), True
             if r.sample_rate != 22050: s = resample_poly(s, 22050, r.sample_rate).astype(np.float32)
             if not rec: best = (s, 1.0, ""); break
-            heard = transcribe(s, 22050); sc = score(c, num, heard)
+            heard = transcribe(s, 22050)
+            sc = (0.0 if not okdur else (1.0 if norm(c[0]) in norm(heard) else 0.5)) if syl else score(c, num, heard)
             if best is None or sc > best[1]: best = (s, sc, heard)
             if sc >= a.accept: break
         s = best[0]

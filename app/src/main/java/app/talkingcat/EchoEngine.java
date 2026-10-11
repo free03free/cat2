@@ -61,7 +61,7 @@ final class EchoEngine {
     private volatile boolean sysReady = false;
     private volatile boolean useSystem = false; // جوجل بلا عربية في جهازك؛ المحرك المدمج هو الأساس
     private volatile int voiceId = 9;           // Supertonic: 10 أصوات (0..9)؛ الصوت 10 كان الأوضح في القياس
-    private volatile int steps = 6;             // خطوات التوليد: أقل = أسرع (3 سريع، 4 متوازن، 6 أوضح)
+    private volatile int steps = 8;             // خطوات التوليد: أقل = أسرع (3 سريع، 4 متوازن، 6 أوضح)
     // إعادة صوتك على خيط مستقل: كانت تنتظر خلف تحميل نموذج النطق وتوليده (عدة ثوانٍ) فتتأخر أو تضيع
     private final ExecutorService playExec = Executors.newSingleThreadExecutor();
     private final java.util.concurrent.locks.ReentrantLock genLock = new java.util.concurrent.locks.ReentrantLock(true); // النموذج لا يُستدعى من خيطين معًا
@@ -137,7 +137,7 @@ final class EchoEngine {
         double sum = 0; for (float x : smp) sum += x * x;
         float rms = (float) Math.sqrt(sum / Math.max(1, smp.length));
         float user = Math.max(0f, Math.min(1f, volume)); // المنزلق يتحكم فعليًا: 0 = صمت، 100% = أعلى مستوى
-        float gain = Math.min(0.20f / Math.max(rms, 1e-4f), 8f);
+        float gain = Math.min(0.24f / Math.max(rms, 1e-4f), 20f);
         int lead = pad ? sr * 60 / 1000 : 0, tail = pad ? sr * 140 / 1000 : 0;
         short[] pcm = new short[lead + smp.length + tail];
         for (int i = 0; i < smp.length; i++) {
@@ -150,8 +150,8 @@ final class EchoEngine {
     /** محدِّد ناعم: خطي حتى 0.7 ثم ضغط لطيف للقمم فقط، فلا يتشوّه الكلام ولا يخفت. */
     private static double softLimit(double v) {
         double a = Math.abs(v);
-        if (a <= 0.7) return v;
-        double y = 0.7 + 0.29 * Math.tanh((a - 0.7) / 0.29);
+        if (a <= 0.6) return v;
+        double y = 0.6 + 0.38 * Math.tanh((a - 0.6) / 0.38);
         return v < 0 ? -y : y;
     }
 
@@ -590,7 +590,7 @@ final class EchoEngine {
         t.write(pcm, 0, pcm.length);
         // لا نهمل مستوى الصوت الذي اختاره المستخدم. القيمة تُطبق على AudioTrack نفسه.
         t.setVolume(1.0f); // مستوى الصوت طُبّق داخل process()؛ لا تخفيض مزدوج هنا
-        try { if (enhancer != null) enhancer.release(); enhancer = new LoudnessEnhancer(t.getAudioSessionId()); enhancer.setTargetGain(300); enhancer.setEnabled(true); } catch (Throwable ignored) { enhancer = null; }
+        try { if (enhancer != null) enhancer.release(); enhancer = new LoudnessEnhancer(t.getAudioSessionId()); enhancer.setTargetGain(500); enhancer.setEnabled(true); } catch (Throwable ignored) { enhancer = null; }
         synchronized (this) { if (my != gen.get()) { t.release(); return; } track = t; }
         t.play();
         cb.emit("speaking", "1");
