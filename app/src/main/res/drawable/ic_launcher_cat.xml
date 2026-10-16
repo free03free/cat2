@@ -1,13 +1,20 @@
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp" android:height="108dp" android:viewportWidth="108" android:viewportHeight="108">
-    <path android:fillColor="#FFF0C8" android:pathData="M0,0h108v108h-108z"/>
-    <path android:fillColor="#8F9AA8" android:strokeColor="#4D5866" android:strokeWidth="2"
-        android:pathData="M24,43 L20,20 L42,34 Q54,28 66,34 L88,20 L84,43 Q92,55 87,72 Q82,88 54,90 Q26,88 21,72 Q16,55 24,43z"/>
-    <path android:fillColor="#FFFFFF" android:pathData="M34,52a7,9 0,1 0,0 18a7,9 0,1 0,0 -18 M74,52a7,9 0,1 0,0 18a7,9 0,1 0,0 -18"/>
-    <path android:fillColor="#2B1A0E" android:pathData="M37,56a3,5 0,1 0,0 10a3,5 0,1 0,0 -10 M71,56a3,5 0,1 0,0 10a3,5 0,1 0,0 -10"/>
-    <path android:fillColor="#8A3144" android:pathData="M51,68h6l-3,4z"/>
-    <path android:strokeColor="#4D5866" android:strokeWidth="2" android:fillColor="@android:color/transparent"
-        android:pathData="M54,72q-5,7 -11,2 M54,72q5,7 11,2"/>
-    <path android:fillColor="#FFFFFF" android:pathData="M17,82h74q3,0 3,3v11q0,3 -3,3h-74q-3,0 -3,-3v-11q0,-3 3,-3z"/>
-    <path android:fillColor="#8F9AA8" android:pathData="M25,86h8v7h-8z M38,85h8v8h-8z M51,86h8v7h-8z M64,85h8v8h-8z M77,86h8v7h-8z"/>
+    <!-- خلفية -->
+    <path android:fillColor="#FF9F2E" android:pathData="M0,0h108v108h-108z"/>
+    <path android:fillColor="#FF7A59" android:pathData="M0,70 Q54,48 108,70 L108,108 L0,108z"/>
+    <!-- ظل الكتاب -->
+    <path android:fillColor="#00000026" android:pathData="M22,44 Q40,38 54,46 Q68,38 86,44 L86,82 Q68,76 54,84 Q40,76 22,82z"/>
+    <!-- الكتاب المفتوح -->
+    <path android:fillColor="#FFFFFF" android:pathData="M24,38 Q42,32 54,40 L54,78 Q42,70 24,76z"/>
+    <path android:fillColor="#FFF4DC" android:pathData="M84,38 Q66,32 54,40 L54,78 Q66,70 84,76z"/>
+    <path android:strokeColor="#E8C99A" android:strokeWidth="1.5" android:fillColor="@android:color/transparent" android:pathData="M54,40 L54,78"/>
+    <!-- ألف مع همزة (الصفحة اليمنى) -->
+    <path android:strokeColor="#E0522B" android:strokeWidth="6" android:strokeLineCap="round" android:fillColor="@android:color/transparent" android:pathData="M69,50 L69,68"/>
+    <path android:strokeColor="#E0522B" android:strokeWidth="3" android:strokeLineCap="round" android:fillColor="@android:color/transparent" android:pathData="M64,44 Q68,41 73,43"/>
+    <!-- باء (الصفحة اليسرى) -->
+    <path android:strokeColor="#2E7BD6" android:strokeWidth="5" android:strokeLineCap="round" android:fillColor="@android:color/transparent" android:pathData="M31,56 Q39,67 47,56"/>
+    <path android:fillColor="#2E7BD6" android:pathData="M39,72m-3,0a3,3 0,1 1,6 0a3,3 0,1 1,-6 0"/>
+    <!-- نجمة التعلّم -->
+    <path android:fillColor="#FFE14D" android:strokeColor="#E8A800" android:strokeWidth="1" android:pathData="M54,12 L57.5,19.5 L65.5,20.5 L59.5,26 L61.2,34 L54,30 L46.8,34 L48.5,26 L42.5,20.5 L50.5,19.5z"/>
 </vector>

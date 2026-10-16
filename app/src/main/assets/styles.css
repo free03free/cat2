@@ -338,3 +338,21 @@ html,body{background:#fff3d6;background-image:radial-gradient(#ffe2a3 2.5px,tran
 .ls-card{background:var(--ls)}
 .ls-card::before{content:"";position:absolute;inset:0;background:linear-gradient(160deg,#ffffff00,#ffffff88);z-index:-1;pointer-events:none}
 #ls-play{white-space:nowrap;font-size:clamp(15px,4.4vw,19px);padding-left:8px;padding-right:8px}
+
+/* تصغير بطاقة الدرس لكسب مساحة: إخفاء كلمة الصورة وتصغير الأزرار */
+#ls-word{display:none}
+.ls-card{padding:8px 10px 10px;border-width:3px;border-radius:26px}
+.ls-top{margin-bottom:2px}
+.ls-count{padding:1px 12px;font-size:13px}
+.ls-main{gap:10px}
+.ls-letter{width:min(100%,96px);border-width:4px}
+.ls-name{font-size:19px;margin-top:4px;padding:0 12px}
+.ls-pic{max-height:112px}
+.ls-pic .ls-emoji{font-size:clamp(54px,18vw,82px)}
+.ls-bottom{margin-top:6px;gap:8px}
+.ls-nav{width:52px;height:46px;border-radius:16px;font-size:22px}
+.ls-bottom .primary{height:46px;border-radius:16px;font-size:16px}
+#ls-play{font-size:clamp(14px,4vw,16px)}
+
+/* إزالة لافتة «قطّ الحروف» العلوية */
+.brand{display:none}
