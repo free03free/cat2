@@ -68,7 +68,7 @@ function warm(kind){
  if(kind==="letters"||kind==="match"||kind==="matchl")letters.forEach((_,i)=>add(nameArgs(i)));
  if(kind==="match"||kind==="matchl")PICS.forEach(L=>L.forEach(e=>add(wordArgsW(e[0]))));
  if(kind==="jig"||kind==="asm")PICS.forEach(L=>L.forEach(e=>add(wordArgsW(e[0]))));
- if(kind==="colors")colors.forEach(c=>add([c[0],BASE]));
+ if(kind==="colors")colors.forEach(c=>add([c[0],LS_SPD[c[0]]||BASE]));
  if(kind==="numbers"){const N=Math.max(5,Math.min(maxNumber,20));for(let n=1;n<=N;n++)add([numberWord(n),BASE])}
  if(kind==="count"){for(let n=1;n<=10;n++)add([numberWord(n),BASE]);add([Q.count,BASE])}
  try{TomNative.warm(JSON.stringify(items))}catch(e){}

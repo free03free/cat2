@@ -333,3 +333,8 @@ html,body{background:#fff3d6;background-image:radial-gradient(#ffe2a3 2.5px,tran
 .color-card{border-radius:22px;box-shadow:0 4px 0 #0002}
 .speak,.primary{border-radius:16px;box-shadow:0 3px 0 #c76a0a}
 .mini-bar{border-radius:24px;border:3px solid #fff}
+
+/* إصلاحات: خلفية بطاقة الدرس صلبة (لا تظهر الشبكة من خلفها) + زر الاستماع في سطر واحد */
+.ls-card{background:var(--ls)}
+.ls-card::before{content:"";position:absolute;inset:0;background:linear-gradient(160deg,#ffffff00,#ffffff88);z-index:-1;pointer-events:none}
+#ls-play{white-space:nowrap;font-size:clamp(15px,4.4vw,19px);padding-left:8px;padding-right:8px}

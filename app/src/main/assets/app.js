@@ -75,7 +75,7 @@ function prefetchAll(){
  order.forEach(i=>{const l=letters[i][0];
   const la=learnArgs(letters[i][1]);add(la[0],la[1]);
  });
- colors.forEach(c=>add(c[0],speechSpeed));
+ colors.forEach(c=>add(c[0],LS_SPD[c[0]]||speechSpeed));
  try{for(let n=1;n<=Math.min(maxNumber,100);n++)add(numberWord(n),speechSpeed)}catch(e){}
  ["مَرْحَبًا أَنَا القِطُّ المُتَكَلِّم"].forEach(x=>add(x,speechSpeed));
  lessonWords.forEach((_,i)=>{["word","both"].forEach(k=>{const a=lsArgs(i,k);add(a[0],a[1])})});
@@ -125,7 +125,7 @@ function lsLetterFit(ch){
   const m=_lcx.measureText(ch),L=m.actualBoundingBoxLeft,R=m.actualBoundingBoxRight,A=m.actualBoundingBoxAscent,D=m.actualBoundingBoxDescent,w=L+R,h=A+D;
   if(!(w>0&&h>0))throw 0;
   const s=Math.min(54/w,54/h,0.62),x=50-((R-L)/2)*s,y=50+((A-D)/2)*s;
-  b.innerHTML='<svg viewBox="0 0 100 100" aria-hidden="true"><text x="'+x.toFixed(2)+'" y="'+y.toFixed(2)+'" font-size="'+(100*s).toFixed(2)+'" font-weight="900" text-anchor="start" fill="currentColor" style="font-family:inherit">'+ch+'</text></svg>';
+  b.innerHTML='<svg viewBox="0 0 100 100" aria-hidden="true" direction="ltr" style="direction:ltr"><text direction="ltr" style="unicode-bidi:bidi-override;direction:ltr;font-family:inherit" x="'+x.toFixed(2)+'" y="'+y.toFixed(2)+'" font-size="'+(100*s).toFixed(2)+'" font-weight="900" text-anchor="start" fill="currentColor">'+ch+'</text></svg>';
  }catch(e){b.textContent=ch}
 }
 function lsOpen(i,say){
@@ -218,7 +218,7 @@ function patClear(){patFirst="";try{localStorage.removeItem(PAT_KEY)}catch(e){}$
 makePad($("gate-pad"),v=>gateSubmit(v));makePad($("pat-pad"),patPicked);$("pat-clear").onclick=patClear;
 function switchSettings(mode){["normal","lock","advanced"].forEach(m=>{$("settings-"+m).classList.toggle("active",m===mode);$(m+"-settings").classList.toggle("active",m===mode)})}
 window.onNativeToast=function(m){if(document.body.classList.contains("lessons-on"))showSpeech(m)};
-function packStatus(p){try{const a=String(p).split("/"),d=+a[0],n=+a[1];let e=document.getElementById("pack-bar");if(!e){e=document.createElement("div");e.id="pack-bar";e.style.cssText="position:fixed;left:8px;right:8px;bottom:8px;z-index:50;background:#222d;color:#fff;border-radius:12px;padding:6px 10px;font:13px sans-serif;text-align:center;pointer-events:none;transition:opacity .6s";document.body.appendChild(e)}if(n>0&&d<n){e.style.opacity=1;e.textContent="🐱 جارٍ تجهيز أصوات القط… "+d+" / "+n}else{e.textContent="✓ اكتمل تجهيز الأصوات";setTimeout(()=>{e.style.opacity=0},2500)}}catch(x){}}
+function packStatus(p){try{const a=String(p).split("/"),d=+a[0],n=+a[1];let e=document.getElementById("pack-bar");if(!e){e=document.createElement("div");e.id="pack-bar";e.style.cssText="position:fixed;left:50%;transform:translateX(-50%);top:calc(env(safe-area-inset-top,0px) + 6px);z-index:50;background:#222d;color:#fff;border-radius:99px;padding:4px 14px;font:12px sans-serif;white-space:nowrap;text-align:center;pointer-events:none;transition:opacity .6s";document.body.appendChild(e)}if(n>0&&d<n){e.style.opacity=1;e.textContent="🐱 جارٍ تجهيز أصوات القط… "+d+" / "+n}else{e.textContent="✓ اكتمل تجهيز الأصوات";setTimeout(()=>{e.style.opacity=0},2500)}}catch(x){}}
 window.onNativeEvent=function(t,p){
  if(t==="packprog"){packStatus(p);return}
  if(t==="ttsready"){pushNativePrefs();schedulePrefetch();return}
