@@ -50,7 +50,7 @@ window.onNativeEvent=function(t,p){
  }
  if(typeof prevEv==="function")return prevEv.apply(this,arguments);
 };
-function say(text,sp){if(window.TomNative&&TomNative.say){TomNative.say(text,Number(sp),0);return true}return false}
+function say(text,sp){try{if(window.TomNative&&TomNative.say){TomNative.say(text,Number(sp),0);return true}}catch(e){}return false}
 function sayWait(text,sp,maxMs){
  return new Promise(res=>{
   cancelWait();
@@ -155,6 +155,7 @@ body.gm-open{overflow:hidden}
 .gms-right[data-n]::after{content:attr(data-n);top:6px;right:12px;width:34px;height:34px;border-radius:50%;background:rgba(0,0,0,.2);font-size:20px;line-height:34px;text-align:center}
 .gms-wrong{background:#ffd7d7!important;animation:gmShake .45s!important}
 .gms-off{opacity:.35;pointer-events:none}
+.gms-opt,.gms-hear,.gms-o,.pz-t,.pz-p,.ls-b,.ls-tab{touch-action:manipulation;-webkit-tap-highlight-color:transparent}
 .gms-hint{animation:gmPulse .8s infinite!important}
 @keyframes gmPop{0%{transform:scale(1)}50%{transform:scale(1.14)}100%{transform:scale(1)}}
 @keyframes gmShake{0%,100%{transform:translateX(0)}25%{transform:translateX(-12px)}75%{transform:translateX(12px)}}
@@ -282,7 +283,15 @@ function start(kind){
  warm(kind);
  next();
 }
+/* حماية: إن حدث خطأ أثناء بناء السؤال نعيد المحاولة بدل أن تبقى الأزرار معلّقة */
 function next(){
+ try{nextRaw()}catch(e){
+  if(!gm)return;
+  gm.err=(gm.err||0)+1;gm.locked=false;gm.last=-1;
+  if(gm.err<=3){const a=gm.act;setTimeout(()=>{if(gm&&gm.act===a)next()},250)}
+ }
+}
+function nextRaw(){
  if(!gm)return;
  if(gm.round>=ROUNDS){finish();return}
  gm.tries=0;gm.locked=false;gm.count=false;gm.mute=false;gm.tapped=0;const a=++gm.act;
@@ -342,12 +351,16 @@ function wrong(btn,a){
 async function roundDone(a,pre,praise){
  const alive=()=>gm&&gm.act===a;
  gm.locked=true;setMascot("😸");confetti(18);hud();
+ let moved=false;
+ /* إن تعطّل النطق أو لم يصل حدث انتهائه، نتابع بعد مهلة بدل أن تتجمّد اللعبة */
+ const go=()=>{if(moved||!alive())return;moved=true;gm.round++;hud();next()};
+ const wd=setTimeout(go,9000);
  try{
-  if(pre){await sayWait(pre[0],pre[1],3500);if(!alive())return}
-  await sayWait(praise,BASE,3000);if(!alive())return;
+  if(pre){await sayWait(pre[0],pre[1],3500);if(!alive()){clearTimeout(wd);return}}
+  await sayWait(praise,BASE,3000);if(!alive()){clearTimeout(wd);return}
  }catch(e){}
- await sleep(250);if(!alive())return;
- gm.round++;hud();next();
+ await sleep(250);clearTimeout(wd);
+ go();
 }
 const praiseFor=tries=>tries===0?FB.great:(tries===1?FB.good:FB.ok);
 function answer(btn,ok){
@@ -607,13 +620,16 @@ async function pzWin(){
  setBest(gm.kind,[0,3,6,9][stars]);
  if(pz.et){pz.et.el.classList.remove("pz-empty");pz.et.el.classList.add("lock","pop")}
  $("gm-prog").style.width="100%";$("gm-count").textContent=pz.total+" / "+pz.total;
+ let ended=false;
+ const fin=()=>{if(ended||!gm||gm.act!==a)return;ended=true;pzEnd(stars)};
+ const wd=setTimeout(fin,9000);   // حماية: إن تعطّل النطق نُظهر النتيجة على أي حال
  try{
   const w=wordArgsW(gm.word);await sayWait(w[0],w[1],3500);
-  if(!gm||gm.act!==a)return;
+  if(!gm||gm.act!==a){clearTimeout(wd);return}
   await sayWait(FB.great,BASE,3000);
  }catch(e){}
- if(!gm||gm.act!==a)return;
- pzEnd(stars);
+ clearTimeout(wd);
+ fin();
 }
 function pzEnd(stars){
  const o=$("pz");if(!o||!pz)return;
