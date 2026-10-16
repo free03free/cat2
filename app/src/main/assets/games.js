@@ -373,7 +373,7 @@ function finish(){
 
 /* ================= ترتيب وتركيب الصورة ================= */
 const PZ_LV=[{n:"سهل",c:2,r:2},{n:"متوسط",c:2,r:3},{n:"صعب",c:3,r:3}];
-const pzLevel=()=>{let v=0;try{v=parseInt(localStorage.getItem("pzLevel")||"0",10)||0}catch(e){}return Math.max(0,Math.min(2,v))};
+const pzLevel=()=>{let v=1;try{const t=localStorage.getItem("pzLevel");if(t!==null){const n=parseInt(t,10);if(!isNaN(n))v=n}}catch(e){}return Math.max(0,Math.min(2,v))};
 let pz=null;
 function pzCleanup(){
  const o=$("pz");if(o)o.remove();
