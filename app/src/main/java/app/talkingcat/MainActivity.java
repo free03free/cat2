@@ -25,11 +25,26 @@ public class MainActivity extends Activity {
     private EchoEngine engine;
     private volatile float speed = 0.95f;
     private volatile float volume = 1.0f;
+    private volatile boolean paused = false;
+    private static final int REQ_EXPORT = 7101, REQ_IMPORT = 7102;
+    private static final long IDLE_MS = 10L * 60 * 1000;   // الشاشة تبقى مضاءة حتى 10 دقائق بلا لمس ولا نشاط داخل التطبيق
+    private final android.os.Handler idleH = new android.os.Handler(android.os.Looper.getMainLooper());
+    private final Runnable idleOff = () -> getWindow().clearFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+    private void bumpScreen() {
+        getWindow().addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+        idleH.removeCallbacks(idleOff);
+        idleH.postDelayed(idleOff, IDLE_MS);
+    }
+    @Override public void onUserInteraction() { bumpScreen(); super.onUserInteraction(); }
 
     @Override protected void onCreate(Bundle b) {
         super.onCreate(b);
+        bumpScreen();
         web = new WebView(this);
         web.setBackgroundColor(0xFFFFF4DC);
+        web.setLongClickable(false);                       // منع قائمة النسخ والمشاركة والبحث عند الضغط المطوّل
+        web.setHapticFeedbackEnabled(false);
+        web.setOnLongClickListener(v -> true);
         setContentView(web);
 
         WebSettings s = web.getSettings();
@@ -45,6 +60,7 @@ public class MainActivity extends Activity {
             }
             @Override public void report(String title, String msg) { toastJs(title + ": " + msg); }
             @Override public void toast(String msg) { toastJs(msg); }
+            @Override public void prefetchIdle() { runOnUiThread(() -> { if (paused && web != null) web.pauseTimers(); }); }
         });
         engine.prepare();
 
@@ -62,12 +78,45 @@ public class MainActivity extends Activity {
 
     private class Bridge {
         @JavascriptInterface public void say(String text, double pitchFactor, int delayMs) {
+            if (paused) return;   // لا نطق والتطبيق في الخلفية
+            runOnUiThread(() -> bumpScreen());   // النطق نشاط داخل التطبيق
             engine.say(text, (float)pitchFactor, delayMs, volume);
         }
         @JavascriptInterface public void setSpeed(double v) { speed = (float) Math.max(0.6, Math.min(1.2, v)); }
         @JavascriptInterface public void setSystemVoice(boolean on) { engine.setUseSystem(on); }
         @JavascriptInterface public void setVoice(int v) { engine.setVoice(v); }
+        @JavascriptInterface public void setSpeedMode(int v) { engine.setSpeedMode(v); }
         @JavascriptInterface public void setSteps(int v) { engine.setSteps(v); }
+        @JavascriptInterface public void stop() { engine.stop(); }
+        @JavascriptInterface public void exportSounds() {
+            runOnUiThread(() -> {
+                try {
+                    android.content.Intent i = new android.content.Intent(android.content.Intent.ACTION_CREATE_DOCUMENT);
+                    i.addCategory(android.content.Intent.CATEGORY_OPENABLE);
+                    i.setType("application/zip");
+                    i.putExtra(android.content.Intent.EXTRA_TITLE, "talkingcat-sounds.zip");
+                    startActivityForResult(i, REQ_EXPORT);
+                } catch (Throwable t) { toastJs("تعذّر فتح نافذة الحفظ"); }
+            });
+        }
+        @JavascriptInterface public void importSounds() {
+            runOnUiThread(() -> {
+                try {
+                    android.content.Intent i = new android.content.Intent(android.content.Intent.ACTION_OPEN_DOCUMENT);
+                    i.addCategory(android.content.Intent.CATEGORY_OPENABLE);
+                    i.setType("*/*");
+                    startActivityForResult(i, REQ_IMPORT);
+                } catch (Throwable t) { toastJs("تعذّر فتح نافذة الاختيار"); }
+            });
+        }
+        @JavascriptInterface public void warm(String json) {
+            try {
+                org.json.JSONArray a = new org.json.JSONArray(json);
+                String[] t = new String[a.length()]; float[] sp = new float[a.length()];
+                for (int i = 0; i < a.length(); i++) { org.json.JSONArray it = a.getJSONArray(i); t[i] = it.getString(0); sp[i] = (float) it.getDouble(1); }
+                engine.warm(t, sp);
+            } catch (Throwable ignored) {}
+        }
         @JavascriptInterface public void prefetch(String json) {
             try {
                 org.json.JSONArray a = new org.json.JSONArray(json);
@@ -120,9 +169,51 @@ public class MainActivity extends Activity {
         if(s.endsWith(".svg"))return"image/svg+xml";
         return"application/octet-stream";
     }
-    @Override protected void onPause(){ engine.stop(); web.onPause(); super.onPause(); }
-    @Override protected void onResume(){super.onResume();web.onResume();}
+    @Override public void onBackPressed() {
+        web.evaluateJavascript("(window.gamesBack&&window.gamesBack())?1:0", v -> {
+            if (!"1".equals(v)) finish();
+        });
+    }
+    /** عند الخروج أو الانتقال لتطبيق آخر: يتوقف النطق وكل التسلسلات فورًا. يستمر تجهيز الأصوات وحده في الخلفية حتى يكتمل، ثم يسكن التطبيق كليًّا. */
+    @Override protected void onPause(){
+        paused = true;
+        idleH.removeCallbacks(idleOff);
+        getWindow().clearFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+        engine.stop();
+        try { web.evaluateJavascript("window.appPaused&&window.appPaused()", null); } catch (Throwable ignored) {}
+        web.onPause();
+        if (!engine.isPrefetching()) web.pauseTimers();
+        super.onPause();
+    }
+    @Override protected void onResume(){
+        super.onResume();
+        paused = false;
+        bumpScreen();
+        web.resumeTimers();
+        web.onResume();
+    }
     @Override protected void onDestroy(){ if(engine!=null)engine.shutdown();web.destroy();super.onDestroy();}
+
+    @Override protected void onActivityResult(int req, int res, android.content.Intent data) {
+        super.onActivityResult(req, res, data);
+        if ((req != REQ_EXPORT && req != REQ_IMPORT) || res != RESULT_OK || data == null || data.getData() == null) return;
+        final Uri u = data.getData();
+        final boolean export = req == REQ_EXPORT;
+        toastJs(export ? "جارٍ تصدير الأصوات…" : "جارٍ استيراد الأصوات…");
+        new Thread(() -> {
+            try {
+                int n;
+                if (export) {
+                    try (java.io.OutputStream os = getContentResolver().openOutputStream(u)) { n = engine.exportPack(os); }
+                    toastJs("تم تصدير " + n + " صوتًا ✓");
+                } else {
+                    try (InputStream is = getContentResolver().openInputStream(u)) { n = engine.importPack(is); }
+                    toastJs(n > 0 ? "تم استيراد " + n + " صوتًا ✓" : "الملف لا يحوي أصواتًا صالحة");
+                    runJs("window.onSoundsImported && window.onSoundsImported();");
+                }
+            } catch (Throwable t) { toastJs((export ? "تعذّر التصدير: " : "تعذّر الاستيراد: ") + t.getMessage()); }
+        }, "sounds-io").start();
+    }
 
     private void toastJs(String msg) {
         runJs("window.onNativeToast && window.onNativeToast(" + org.json.JSONObject.quote(msg) + ");");

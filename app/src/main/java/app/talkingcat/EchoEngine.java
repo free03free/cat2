@@ -47,6 +47,7 @@ final class EchoEngine {
         void emit(String type, String payload);
         void report(String title, String msg);
         void toast(String msg);
+        void prefetchIdle();
     }
 
     private static final String ASSET_DIR = "models/tts-ar";
@@ -67,7 +68,7 @@ final class EchoEngine {
     private final java.util.concurrent.locks.ReentrantLock genLock = new java.util.concurrent.locks.ReentrantLock(true); // النموذج لا يُستدعى من خيطين معًا
     private final AtomicInteger fgBusy = new AtomicInteger(0);
     private final AtomicInteger prefetchGen = new AtomicInteger(0);
-    private final ExecutorService bg = Executors.newSingleThreadExecutor(r -> { Thread t = new Thread(r, "tts-prefetch"); t.setDaemon(true); t.setPriority(Thread.MIN_PRIORITY); return t; });
+    private final ExecutorService bg = Executors.newSingleThreadExecutor(r -> { Thread t = new Thread(r, "tts-prefetch"); t.setDaemon(true); t.setPriority(Thread.NORM_PRIORITY); return t; });
     // ذاكرة مؤقتة: الحروف والكلمات تتكرر كثيرًا، فلا نعيد توليدها
     /** مقطع صوتي مع معدل عيناته (المضمَّن 22050، والمولَّد وقت التشغيل 44100). */
     private static final class Clip { final float[] s; final int rate; Clip(float[] s, int rate) { this.s = s; this.rate = rate; } }
@@ -77,6 +78,28 @@ final class EchoEngine {
     private volatile long lastFg = 0L;           // آخر وقت ضغط فيه الطفل (لإيقاف التجهيز الخلفي أثناء اللعب)
 
     void setVoice(int v) { voiceId = Math.max(0, Math.min(9, v)); }
+    /** طريقة السرعة: 0 تلقائي (ذكي) · 1 فوري (الصوت الجاهز + تعديل السرعة دائمًا) · 2 أنقى جودة (توليد بالسرعة المطلوبة دائمًا). */
+    private volatile int speedMode = 0;
+    void setSpeedMode(int m) { speedMode = Math.max(0, Math.min(2, m)); }
+    private final java.util.HashMap<Integer, java.util.HashMap<String, Integer>> preSpd = new java.util.HashMap<>();
+    /** سرعة المقطع الجاهز لهذا النص في الحزمة (نسبة مئوية، مثل 90)، أو 0 إن لم يوجد. */
+    private synchronized int preSpeedFor(String text) {
+        org.json.JSONObject o = preFor(voiceId);
+        if (o == null) return 0;
+        java.util.HashMap<String, Integer> m = preSpd.get(voiceId);
+        if (m == null) {
+            m = new java.util.HashMap<>();
+            java.util.Iterator<String> it = o.keys();
+            while (it.hasNext()) {
+                String k = it.next(); int i = k.indexOf('|');
+                if (i <= 0) continue;
+                try { String t = k.substring(i + 1); if (!m.containsKey(t)) m.put(t, Integer.parseInt(k.substring(0, i))); } catch (NumberFormatException ignored) {}
+            }
+            preSpd.put(voiceId, m);
+        }
+        Integer v = m.get(text);
+        return v == null ? 0 : v;
+    }
     void setSteps(int v) { steps = Math.max(2, Math.min(10, v)); }
     private LoudnessEnhancer enhancer;
 
@@ -234,6 +257,11 @@ final class EchoEngine {
 
     private synchronized OfflineTts getTts() {
         if (tts != null) return tts;
+        tts = buildTts(4);
+        return tts;
+    }
+
+    private OfflineTts buildTts(int threads) {
         File d = ttsDir();
         OfflineTtsSupertonicModelConfig v = new OfflineTtsSupertonicModelConfig();
         v.setDurationPredictor(new File(d, "duration_predictor.int8.onnx").getAbsolutePath());
@@ -244,10 +272,9 @@ final class EchoEngine {
         v.setUnicodeIndexer(new File(d, "unicode_indexer.bin").getAbsolutePath());
         v.setVoiceStyle(new File(d, "voice.bin").getAbsolutePath());
         OfflineTtsModelConfig m = new OfflineTtsModelConfig();
-        m.setSupertonic(v); m.setNumThreads(4); m.setDebug(false);
+        m.setSupertonic(v); m.setNumThreads(threads); m.setDebug(false);
         OfflineTtsConfig c = new OfflineTtsConfig(); c.setModel(m);
-        tts = new OfflineTts(null, c);
-        return tts;
+        return new OfflineTts(null, c);
     }
 
     /** يقصّ الصمت الطويل قبل الكلام وبعده (Supertonic يضيف نحو 0.4–0.6ث قبل و0.6–0.75ث بعد)، وهو أكبر سبب لإحساس التأخر. */
@@ -281,6 +308,45 @@ final class EchoEngine {
             java.util.Arrays.sort(fs, (a, b) -> Long.compare(a.lastModified(), b.lastModified()));
             for (File f : fs) { if (total <= 500L * 1024 * 1024) break; total -= f.length(); f.delete(); }
         } catch (Throwable ignored) {}
+    }
+
+    /** يضغط كل الأصوات المجهَّزة (ملفات pcm) في zip ويكتبها في المجرى؛ يعيد عددها. */
+    int exportPack(java.io.OutputStream os) throws java.io.IOException {
+        java.util.zip.ZipOutputStream z = new java.util.zip.ZipOutputStream(new java.io.BufferedOutputStream(os, 64 * 1024));
+        z.setLevel(1);
+        byte[] buf = new byte[64 * 1024];
+        int n = 0;
+        File[] fs = cacheDir().listFiles();
+        if (fs != null) for (File f : fs) {
+            if (!f.isFile() || !f.getName().endsWith(".pcm")) continue;
+            z.putNextEntry(new java.util.zip.ZipEntry(f.getName()));
+            try (java.io.FileInputStream in = new java.io.FileInputStream(f)) {
+                int r; while ((r = in.read(buf)) > 0) z.write(buf, 0, r);
+            }
+            z.closeEntry(); n++;
+        }
+        z.finish(); z.flush();
+        return n;
+    }
+
+    /** يدمج zip أصوات مصدَّرًا سابقًا في المجلد (يستبدل المتشابه)؛ يعيد عدد الملفات المدمجة. */
+    int importPack(java.io.InputStream is) throws java.io.IOException {
+        java.util.zip.ZipInputStream z = new java.util.zip.ZipInputStream(new java.io.BufferedInputStream(is, 64 * 1024));
+        File dir = cacheDir();
+        byte[] buf = new byte[64 * 1024];
+        int n = 0;
+        java.util.zip.ZipEntry e;
+        while ((e = z.getNextEntry()) != null) {
+            String name = e.getName();
+            if (e.isDirectory() || !name.matches("[0-9a-f]{1,40}\\.pcm")) continue;   // أسماء آمنة فقط
+            File f = new File(dir, name), tmp = new File(dir, name + ".tmp");
+            try (java.io.FileOutputStream out = new java.io.FileOutputStream(tmp)) {
+                int r; while ((r = z.read(buf)) > 0) out.write(buf, 0, r);
+            }
+            if (!tmp.renameTo(f)) { f.delete(); tmp.renameTo(f); }
+            n++;
+        }
+        return n;
     }
 
     private File cacheFile(String key) {
@@ -327,12 +393,44 @@ final class EchoEngine {
         return o != null && o.has(preKey(text, speed));
     }
 
+    private final java.util.LinkedHashMap<String, Clip> preClips =
+        new java.util.LinkedHashMap<String, Clip>(128, 0.75f, true) {
+            @Override protected boolean removeEldestEntry(java.util.Map.Entry<String, Clip> e) { return size() > 120; }
+        };
+
     private Clip readPre(String text, float speed) {
         org.json.JSONObject o = preFor(voiceId);
         if (o == null) return null;
         String k = preKey(text, speed);
         if (!o.has(k)) return null;
-        return decodeAsset("tts-pre/v" + voiceId + "/" + o.optString(k));
+        String ck = voiceId + "|" + k;
+        synchronized (preClips) { Clip h = preClips.get(ck); if (h != null) return h; }
+        Clip c = decodeAsset("tts-pre/v" + voiceId + "/" + o.optString(k));
+        if (c != null) synchronized (preClips) { preClips.put(ck, c); }
+        return c;
+    }
+
+    private Clip wordFromPack(String word, float speed) {
+        String bt = SyllableCutter.bothText(word);
+        if (bt == null) return null;
+        Clip bp = readPre(bt, speed);
+        if (bp == null) return null;
+        float[] cut = SyllableCutter.cutWordRelaxed(bp.s, bp.rate, 100);
+        return cut == null ? null : new Clip(cut, bp.rate);
+    }
+
+    /** يفكّ مقاطع اللعبة مسبقًا في الذاكرة فيصير النطق فوريًا. */
+    void warm(final String[] texts, final float[] speeds) {
+        new Thread(() -> {
+            for (int i = 0; i < texts.length; i++) {
+                try {
+                    String c = clean(texts[i]);
+                    if (c.isEmpty()) continue;
+                    float sp = Math.max(0.6f, Math.min(1.3f, speeds[i]));
+                    readPre(c, sp);
+                } catch (Throwable ignored) {}
+            }
+        }, "tts-warm").start();
     }
 
     /** يفكّ ملف m4a/AAC من الـ assets إلى عيّنات float (صوت أحادي). */
@@ -415,66 +513,180 @@ final class EchoEngine {
     }
 
     private String keyOf(String text, float speed) {
-        return voiceId + "|" + steps + "|" + Math.round(speed * 100) + "|" + text;
+        // «w2|»: يُبطل ما حُفظ على الجهاز سابقًا لكلمات الصور بالطريقة القديمة (الكلمة وحدها)
+        return voiceId + "|" + steps + "|" + Math.round(speed * 100) + "|" + (SyllableCutter.wordName(text) != null ? "w2|" : "") + text;
     }
 
     /** مضمَّن في التطبيق ← ذاكرة ← قرص ← توليد (Supertonic، lang=ar). النتيجة مقصوصة الصمت. */
-    private Clip synthBuiltin(String text, float speed) {
+    private Clip synthBuiltin(String text, float speed) { return synthBuiltin(text, speed, null, null); }
+
+    private Clip synthBuiltin(String text, float speed, OfflineTts own, java.util.concurrent.locks.ReentrantLock ownLock) {
         final String key = keyOf(text, speed);
         Clip pre = readPre(text, speed);
         if (pre != null) return pre;
         synchronized (cache) { Clip hit = cache.get(key); if (hit != null) return hit; }
         Clip d = readDisk(key);
         if (d != null) { synchronized (cache) { cache.put(key, d); } return d; }
+        if (SyllableCutter.wordName(text) != null) {
+            // كلمة صورة الدرس: نأخذها من ذيل مقطع «الحرف، الكلمة» الجاهز نفسه إن وُجد بهذه السرعة (نطق مضمون كما يسمعه الطفل)
+            Clip wp = wordFromPack(text, speed);
+            if (wp != null) { synchronized (cache) { cache.put(key, wp); } return wp; }
+        }
         GeneratedAudio a;
-        genLock.lock();
+        float[] syllable = null;   // مقطع (بَ، أَبْ، بَا): يُقتطع من جملة حاملة كما في tools/pregen.py
+        final java.util.concurrent.locks.ReentrantLock lk = ownLock != null ? ownLock : genLock;
+        lk.lock();
         try {
             synchronized (cache) { Clip hit = cache.get(key); if (hit != null) return hit; }
-            OfflineTts t = getTts();
+            OfflineTts t = own != null ? own : getTts();
             GenerationConfig g = new GenerationConfig();
             g.setSid(voiceId); g.setSpeed(speed); g.setNumSteps(steps);
             HashMap<String, String> ex = new HashMap<>(); ex.put("lang", "ar"); g.setExtra(ex);
-            a = t.generateWithConfig(text, g);
-        } finally { genLock.unlock(); }
+            if (SyllableCutter.nameWord(text) != null) {
+                // اسم حرف: نولّد «الاسم ، ، ، كلمته» ونقتطع الاسم فقط
+                GeneratedAudio ca = null;
+                for (String ph : SyllableCutter.namePhrases(text)) {
+                    GeneratedAudio c1 = t.generateWithConfig(ph, g);
+                    float[] raw = c1 == null ? null : c1.getSamples();
+                    if (raw != null && raw.length > 0) {
+                        float[] cut = SyllableCutter.cutName(raw, c1.getSampleRate());
+                        if (cut != null) { ca = c1; syllable = cut; break; }
+                    }
+                }
+                a = syllable != null ? ca : t.generateWithConfig(text, g);
+            } else if (SyllableCutter.wordName(text) != null) {
+                // كلمة صورة الدرس: ينطقها النموذج وحدها بحركات خاطئة أحيانًا (حَصان، ذُرا)، فنولّد «الحرف، الكلمة» ونقتطع الكلمة
+                GeneratedAudio ca = null;
+                String[] phs = SyllableCutter.wordPhrases(text);
+                for (int q = 0; q < phs.length && syllable == null; q++) {
+                    GeneratedAudio c1 = t.generateWithConfig(phs[q], g);
+                    float[] raw = c1 == null ? null : c1.getSamples();
+                    if (raw != null && raw.length > 0) {
+                        float[] cut = SyllableCutter.cutWordRelaxed(raw, c1.getSampleRate(), q == 0 ? 100 : 150);
+                        if (cut != null) { ca = c1; syllable = cut; }
+                    }
+                }
+                a = syllable != null ? ca : t.generateWithConfig(text, g);   // فشل الاقتطاع: نولّدها وحدها
+            } else if (SyllableCutter.isSyllable(text)) {
+                // النموذج ينطق المقطع المنفرد بشكل رديء؛ نولّد «حرف بَ، كرر: بَ» ونأخذ آخر مقطع فقط
+                GeneratedAudio ca = null;
+                for (String cr : SyllableCutter.carriers(text)) {
+                    GeneratedAudio c1 = t.generateWithConfig(cr, g);
+                    float[] raw = c1 == null ? null : c1.getSamples();
+                    if (raw != null && raw.length > 0) {
+                        float[] cut = SyllableCutter.cutLast(raw, c1.getSampleRate(), SyllableCutter.maxDur(text));
+                        if (cut != null) { ca = c1; syllable = cut; break; }
+                    }
+                }
+                a = syllable != null ? ca : t.generateWithConfig(text, g);   // فشل الاقتطاع: نولّد المقطع وحده
+            } else {
+                a = t.generateWithConfig(text, g);
+            }
+        } finally { lk.unlock(); }
         float[] smp = a == null ? null : a.getSamples();
         if (smp == null || smp.length == 0) return null;
         int rate = a.getSampleRate();
-        Clip c = new Clip(trim(smp, rate), rate);
+        Clip c = new Clip(syllable != null ? syllable : trim(smp, rate), rate);
         synchronized (cache) { cache.put(key, c); }
         if (lessonTexts.contains(text)) writeDisk(key, c.s, c.rate);
         return c;
     }
 
-    /** تجهيز مسبق في الخلفية لكل الحروف والكلمات: بعدها يصير النطق فوريًا. يتوقف مؤقتًا كلما احتاج الطفل نطقًا مباشرًا. */
+    private final AtomicInteger prefetchJobs = new AtomicInteger(0);
+    private final Object wlLock = new Object();
+    private android.os.PowerManager.WakeLock wakeLock;
+
+    /** هل ما زال تجهيز الأصوات جاريًا (أو في الانتظار)؟ */
+    boolean isPrefetching() { return prefetchJobs.get() > 0; }
+
+    /** يبقي المعالج يعمل أثناء التجهيز فقط (حتى لو خرج الطفل من التطبيق أو انطفأت الشاشة)، ويُفلَت فور الانتهاء. */
+    private void holdCpu(boolean on) {
+        try {
+            synchronized (wlLock) {
+                if (on) {
+                    if (wakeLock == null) {
+                        android.os.PowerManager pm = (android.os.PowerManager) ctx.getSystemService(Context.POWER_SERVICE);
+                        wakeLock = pm.newWakeLock(android.os.PowerManager.PARTIAL_WAKE_LOCK, "talkingcat:prefetch");
+                        wakeLock.setReferenceCounted(false);
+                    }
+                    if (!wakeLock.isHeld()) wakeLock.acquire(3L * 60 * 60 * 1000);
+                } else if (wakeLock != null && wakeLock.isHeld()) wakeLock.release();
+            }
+        } catch (Throwable ignored) {}
+    }
+
+    private void endPrefetchJob() {
+        if (prefetchJobs.decrementAndGet() <= 0) {
+            prefetchJobs.set(0);
+            holdCpu(false);
+            try { cb.prefetchIdle(); } catch (Throwable ignored) {}
+        }
+    }
+
+    /** تجهيز مسبق في الخلفية لكل الحروف والكلمات: بعدها يصير النطق فوريًا. يتوقف مؤقتًا كلما احتاج الطفل نطقًا مباشرًا.
+     *  أُسرع بتوزيع العمل على عدة خيوط (كل خيط إضافي بنسخة نموذج خاصة) وبأولوية عادية؛ النتيجة نفسها والجودة نفسها. */
     void prefetch(final String[] texts, final float[] speeds) {
         final int my = prefetchGen.incrementAndGet();
         for (String t : texts) lessonTexts.add(clean(t));
-        bg.execute(() -> {
-            try {
-                housekeeping();
-                int missing = 0;
-                for (int i = 0; i < texts.length; i++) {
-                    String c0 = clean(texts[i]);
-                    if (c0.isEmpty()) continue;
-                    float sp0 = Math.max(0.6f, Math.min(1.3f, speeds[i]));
-                    if (!isCached(keyOf(c0, sp0), c0, sp0)) missing++;
-                }
-                if (missing == 0) return;
-                final int total = missing; int doneN = 0;
-                cb.emit("packprog", "0/" + total);
-                for (int i = 0; i < texts.length && my == prefetchGen.get(); i++) {
-                    while (my == prefetchGen.get() && (fgBusy.get() > 0 || System.currentTimeMillis() - lastFg < 1500)) Thread.sleep(300);
-                    if (!canSpeak()) return;
-                    String c = clean(texts[i]);
-                    if (c.isEmpty()) continue;
-                    float sp = Math.max(0.6f, Math.min(1.3f, speeds[i]));
-                    if (isCached(keyOf(c, sp), c, sp)) continue;
-                    synthBuiltin(c, sp);
-                    doneN++;
-                    if (doneN % 2 == 0 || doneN >= total) cb.emit("packprog", Math.min(doneN, total) + "/" + total);
-                }
-            } catch (Throwable ignored) {}
-        });
+        if (prefetchJobs.getAndIncrement() == 0) holdCpu(true);
+        try { bg.execute(() -> runPrefetch(my, texts, speeds)); }
+        catch (Throwable t) { endPrefetchJob(); }
+    }
+
+    private void runPrefetch(final int my, String[] texts, float[] speeds) {
+        try {
+            housekeeping();
+            final List<String> pt = new ArrayList<>();
+            final List<Float> ps = new ArrayList<>();
+            for (int i = 0; i < texts.length; i++) {
+                String c0 = clean(texts[i]);
+                if (c0.isEmpty()) continue;
+                float sp0 = Math.max(0.6f, Math.min(1.3f, speeds[i]));
+                if (speedMode == 1 && preSpeedFor(c0) > 0) continue;   // وضع «فوري»: يكفي المقطع الجاهز، فلا نولّد نسخة أخرى
+                if (!isCached(keyOf(c0, sp0), c0, sp0)) { pt.add(c0); ps.add(sp0); }
+            }
+            final int total = pt.size();
+            if (total == 0) return;
+            cb.emit("packprog", "0/" + total);
+            int cores = Runtime.getRuntime().availableProcessors();
+            final int workers = cores >= 8 ? 3 : (cores >= 6 ? 2 : 1);
+            final AtomicInteger next = new AtomicInteger(0), done = new AtomicInteger(0);
+            Thread[] ths = new Thread[workers];
+            for (int w = 0; w < workers; w++) {
+                final boolean primary = (w == 0);
+                ths[w] = new Thread(() -> prefetchWorker(my, pt, ps, total, next, done, primary), "tts-prefetch-" + w);
+                ths[w].setPriority(Thread.NORM_PRIORITY);
+                ths[w].setDaemon(true);
+                ths[w].start();
+            }
+            for (Thread t : ths) t.join();
+        } catch (Throwable ignored) {
+        } finally { endPrefetchJob(); }
+    }
+
+    private void prefetchWorker(int my, List<String> pt, List<Float> ps, int total, AtomicInteger next, AtomicInteger done, boolean primary) {
+        OfflineTts own = null;
+        java.util.concurrent.locks.ReentrantLock ownLock = null;
+        try {
+            if (!primary) {
+                if (!canSpeak()) return;
+                try { own = buildTts(2); ownLock = new java.util.concurrent.locks.ReentrantLock(); }
+                catch (Throwable t) { return; }   // تعذّر نسخ إضافية: يكمل الخيط الأساسي وحده
+            }
+            while (my == prefetchGen.get()) {
+                int k = next.getAndIncrement();
+                if (k >= total) break;
+                while (my == prefetchGen.get() && (fgBusy.get() > 0 || System.currentTimeMillis() - lastFg < 1500)) Thread.sleep(300);
+                if (my != prefetchGen.get() || !canSpeak()) break;
+                String c = pt.get(k); float sp = ps.get(k);
+                if (!isCached(keyOf(c, sp), c, sp)) synthBuiltin(c, sp, own, ownLock);
+                int d = done.incrementAndGet();
+                if (d % 2 == 0 || d >= total) cb.emit("packprog", Math.min(d, total) + "/" + total);
+            }
+        } catch (Throwable ignored) {
+        } finally {
+            if (own != null) { try { own.release(); } catch (Throwable ignored) {} }
+        }
     }
 
     /** يقسم النص الطويل إلى جمل لنبدأ النطق بعد الجملة الأولى فقط. */
@@ -535,6 +747,15 @@ final class EchoEngine {
                 if (c.isEmpty()) { fin(onFinished); return; }
                 float[] smp = null; int sr = 22050;
                 if (useSystem) { int[] r = {0}; smp = synthSystem(c, speed, r); if (smp != null) sr = r[0]; }
+                float tempoApply = 1.0f;
+                if (smp == null && speedMode != 2 && !hasPre(c, speed) && !isCached(keyOf(c, speed), c, speed)) {
+                    // ذكي: لا ننتظر التوليد؛ نأخذ المقطع الجاهز بسرعته ونعدّل السرعة وقت التشغيل دون تغيير النغمة
+                    int ps = preSpeedFor(c);
+                    if (ps > 0) {
+                        Clip pc = readPre(c, ps / 100f);
+                        if (pc != null) { smp = pc.s; sr = pc.rate; tempoApply = Math.max(0.6f, Math.min(1.5f, speed / (ps / 100f))); }
+                    }
+                }
                 if (smp == null) {
                     if (!canSpeak()) { cb.toast("صوت النطق العربي غير جاهز بعد."); fin(onFinished); return; }
                     List<String> parts = splitSentences(c);
@@ -545,7 +766,7 @@ final class EchoEngine {
                 if (smp == null || smp.length == 0) { fin(onFinished); return; }
                 short[] pcm = process(smp, sr, volume, true);
                 fgBusy.decrementAndGet();
-                try { playPcm(pcm, Math.round(sr * rateMul), delayMs, my, Math.max(0f, Math.min(1f, volume)), onFinished); }
+                try { playPcm(pcm, Math.round(sr * rateMul), delayMs, my, Math.max(0f, Math.min(1f, volume)), onFinished, tempoApply); }
                 finally { fgBusy.incrementAndGet(); }
             } catch (Throwable t) {
                 cb.report("خطأ في النطق", t.getClass().getSimpleName() + ": " + t.getMessage());
@@ -581,6 +802,10 @@ final class EchoEngine {
     }
 
     private void playPcm(short[] pcm, int rate, int delayMs, int my, float volume, Runnable onFinished) throws Exception {
+        playPcm(pcm, rate, delayMs, my, volume, onFinished, 1.0f);
+    }
+
+    private void playPcm(short[] pcm, int rate, int delayMs, int my, float volume, Runnable onFinished, float tempo) throws Exception {
         try { Thread.sleep(Math.max(0, Math.min(1000, delayMs))); } catch (InterruptedException e) { return; }
         if (my != gen.get()) return;
         AudioTrack t = new AudioTrack.Builder()
@@ -588,6 +813,7 @@ final class EchoEngine {
             .setAudioFormat(new AudioFormat.Builder().setEncoding(AudioFormat.ENCODING_PCM_16BIT).setSampleRate(rate).setChannelMask(AudioFormat.CHANNEL_OUT_MONO).build())
             .setBufferSizeInBytes(pcm.length * 2).setTransferMode(AudioTrack.MODE_STATIC).build();
         t.write(pcm, 0, pcm.length);
+        if (Math.abs(tempo - 1.0f) > 0.01f) { try { t.setPlaybackParams(new android.media.PlaybackParams().setSpeed(tempo).setPitch(1.0f)); } catch (Throwable ignored) {} }
         // لا نهمل مستوى الصوت الذي اختاره المستخدم. القيمة تُطبق على AudioTrack نفسه.
         t.setVolume(1.0f); // مستوى الصوت طُبّق داخل process()؛ لا تخفيض مزدوج هنا
         try { if (enhancer != null) enhancer.release(); enhancer = new LoudnessEnhancer(t.getAudioSessionId()); enhancer.setTargetGain(500); enhancer.setEnabled(true); } catch (Throwable ignored) { enhancer = null; }
@@ -595,7 +821,7 @@ final class EchoEngine {
         t.play();
         cb.emit("speaking", "1");
         try {
-            long limit = System.currentTimeMillis() + pcm.length * 1000L / rate + 2000;
+            long limit = System.currentTimeMillis() + (long) (pcm.length * 1000L / rate / Math.min(1f, tempo)) + 2000;
             while (my == gen.get() && t.getPlaybackHeadPosition() < pcm.length && System.currentTimeMillis() < limit) Thread.sleep(30);
         } finally {
             cb.emit("speaking", "0");
