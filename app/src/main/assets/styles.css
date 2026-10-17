@@ -356,3 +356,19 @@ html,body{background:#fff3d6;background-image:radial-gradient(#ffe2a3 2.5px,tran
 
 /* إزالة لافتة «قطّ الحروف» العلوية */
 .brand{display:none}
+
+/* ===== أزرار الأوضاع والتبويبات: أزرار حقيقية بحافة بارزة بدل نصوص داخل شريط ===== */
+.mode-switch{background:transparent;box-shadow:none;padding:0 0 8px;gap:10px;margin:12px 0 14px}
+.mode-switch .mode{--m:#ff8a1f;--e:#b85a00;--t:#fff0d9;border:0;border-radius:20px;min-height:56px;padding:10px 4px;font-size:16px;font-weight:900;color:var(--e);background:linear-gradient(180deg,#fff 12%,var(--t));box-shadow:0 6px 0 var(--m),0 12px 16px -6px rgba(0,0,0,.2);transform:none;transition:transform .1s,box-shadow .1s}
+#lessons-mode{--m:#7c5cf0;--e:#4b34b5;--t:#ece7ff}
+#cg-mode{--m:#12b5a0;--e:#0b7466;--t:#d9f6f1}
+.mode-switch .mode.active{background:linear-gradient(180deg,var(--m),var(--m));color:#fff;box-shadow:0 6px 0 var(--m),0 6px 0 rgba(0,0,0,.3),0 14px 18px -6px var(--m)}
+.mode-switch .mode:active{transform:translateY(5px);box-shadow:0 1px 0 var(--m)}
+.mode-switch .mode.active:active{box-shadow:0 1px 0 rgba(0,0,0,.3)}
+.mode-switch .gear-mini{min-height:56px;border-radius:20px;background:linear-gradient(180deg,#fff,#fff0c8);box-shadow:0 6px 0 #e3c98f,0 12px 16px -6px rgba(0,0,0,.18)}
+.mode-switch .gear-mini:active{transform:translateY(5px);box-shadow:0 1px 0 #e3c98f}
+.tabs{background:transparent;box-shadow:none;padding:0 0 8px;gap:10px}
+.tab{min-height:74px;border-radius:22px;color:var(--c);background:linear-gradient(180deg,#fff 12%,#fdf3e0);box-shadow:0 6px 0 var(--c),0 12px 16px -6px rgba(0,0,0,.18);transition:transform .1s,box-shadow .1s}
+.tab.active{background:var(--c);color:#fff;box-shadow:0 6px 0 var(--c),0 6px 0 rgba(0,0,0,.28),0 14px 18px -6px var(--c)}
+.tab:active{transform:translateY(5px);box-shadow:0 1px 0 var(--c)}
+.tab.active:active{box-shadow:0 1px 0 rgba(0,0,0,.28)}

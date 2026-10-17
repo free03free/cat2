@@ -228,7 +228,7 @@ body.gm-open{overflow:hidden}
 .gms-opts>:nth-child(4n+1),.pz-letters>:nth-child(4n+1){--k:#ffdfe3;--e:rgba(35,25,60,.3);--g:#d6334a}
 .gms-opts>:nth-child(4n+2),.pz-letters>:nth-child(4n+2){--k:#d9eeff;--e:rgba(35,25,60,.3);--g:#1c6cc0}
 .gms-opts>:nth-child(4n+3),.pz-letters>:nth-child(4n+3){--k:#fff0bf;--e:rgba(35,25,60,.3);--g:#b86e00}
-.gms-opts>:nth-child(4n){--k:#d6f7e6;--e:rgba(35,25,60,.3);--g:#138a5c}
+.gms-opts>:nth-child(4n),.pz-letters>:nth-child(4n){--k:#d6f7e6;--e:rgba(35,25,60,.3);--g:#138a5c}
 .gms-opt:not(.gms-color),.pz-letters button:not(.rnd){background:linear-gradient(180deg,#fff 18%,var(--k) 100%);color:var(--g);border-radius:32px;box-shadow:0 10px 0 var(--e),0 18px 20px -6px rgba(0,0,0,.3),inset 0 3px 0 #fff}
 .pz-letters button:not(.rnd){border-radius:24px;box-shadow:0 7px 0 var(--e),0 12px 14px -6px rgba(0,0,0,.3),inset 0 3px 0 #fff}
 .gms-opt:not(.gms-color):active{transform:translateY(8px);box-shadow:0 2px 0 var(--e),inset 0 3px 0 #fff}
