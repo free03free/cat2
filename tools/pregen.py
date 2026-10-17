@@ -372,8 +372,20 @@ if __name__ == "__main__":
     done_mark = os.path.join(a.out, ".complete")
     if os.path.exists(done_mark): os.remove(done_mark)
     tasks = [(v, k) for v in voices for k in range(max(1, a.shards))]
-    with get_context("fork").Pool(max(1, min(a.jobs, len(tasks)))) as pool:
-        res = pool.map(work, tasks, chunksize=1)
+    njobs = max(1, min(a.jobs, len(tasks)))
+    try:
+        with get_context("fork").Pool(njobs) as pool:
+            res = pool.map(work, tasks, chunksize=1)
+    except (OSError, ImportError) as e:
+        # أندرويد/proot: لا يوجد /dev/shm فتفشل أقفال multiprocessing (FileNotFoundError في SemLock). نكمل بخيوط عادية، وإلا بالتتابع.
+        print(f"تنبيه: تعذّر تشغيل العمليات المتوازية ({e.__class__.__name__}: {e})؛ سأولّد بالخيوط بدلًا منها.", flush=True)
+        try:
+            from multiprocessing.pool import ThreadPool
+            with ThreadPool(njobs) as pool:
+                res = pool.map(work, tasks, chunksize=1)
+        except (OSError, ImportError) as e2:
+            print(f"تنبيه: تعذّرت الخيوط أيضًا ({e2}); سأولّد بالتتابع (أبطأ).", flush=True)
+            res = [work(tk) for tk in tasks]
     # دمج الفهارس الجزئية في index.json لكل صوت، وحذف ما لم يعد مطلوبًا
     for v in voices:
         od = os.path.join(a.out, f"v{v}")

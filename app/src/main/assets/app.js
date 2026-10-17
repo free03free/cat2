@@ -11,7 +11,7 @@ if(!Number.isFinite(learningVolume)||learningVolume<0)learningVolume=100;
 if(learningVolume>100)learningVolume=100;
 let volumeLevel=learningVolume;
 if(!Number.isFinite(speechSpeed))speechSpeed=0.9;
-let features=Object.assign({quiz:true,gamesTab:true},JSON.parse(localStorage.getItem(FEATURE_KEY)||"{}"));
+let features=Object.assign({quiz:true,gamesTab:true,writingTab:true},JSON.parse(localStorage.getItem(FEATURE_KEY)||"{}"));
 let selectedNumber=1,selectedLetter=0,selectedColor=0,quizAnswer="",quizActive=false;
 let heard="",pokes=0,pokeT=0,idleAt=Date.now(),talkDog=0;
 pushNativePrefs();
@@ -144,14 +144,14 @@ function setMode(mode,silent){const study=mode==="learning",letterMode=mode==="l
  pushNativePrefs();
  if(silent)return;
  }
-function openSettings(){$("settings").hidden=false;switchSettings("advanced");$("max-number").value=maxNumber;$("system-voice").checked=localStorage.getItem("systemVoice")==="1";$("voice-id").value=localStorage.getItem("voiceSel")||"9";$("tts-quality").value=localStorage.getItem(STEPS_KEY)||"8";$("speech-speed-value").textContent=Number(speechSpeed).toFixed(2);$("speech-speed").value=speechSpeed;$("speed-mode").value=localStorage.getItem("speedMode")||"0";$("learning-volume-level").value=learningVolume;$("learning-volume-value").textContent=learningVolume+"%";$("enable-games-tab").checked=features.gamesTab!==false}
+function openSettings(){$("settings").hidden=false;switchSettings("advanced");$("max-number").value=maxNumber;$("system-voice").checked=localStorage.getItem("systemVoice")==="1";$("voice-id").value=localStorage.getItem("voiceSel")||"9";$("tts-quality").value=localStorage.getItem(STEPS_KEY)||"8";$("speech-speed-value").textContent=Number(speechSpeed).toFixed(2);$("speech-speed").value=speechSpeed;$("speed-mode").value=localStorage.getItem("speedMode")||"0";$("learning-volume-level").value=learningVolume;$("learning-volume-value").textContent=learningVolume+"%";$("enable-games-tab").checked=features.gamesTab!==false;if($("enable-writing-tab"))$("enable-writing-tab").checked=features.writingTab!==false}
 function bind(){
  $("learning-mode").onclick=()=>setMode("learning");$("mini-cat-btn").onclick=speakCurrent;
  document.querySelectorAll(".tab").forEach(t=>t.onclick=()=>{document.querySelectorAll(".tab").forEach(x=>x.classList.remove("active"));document.querySelectorAll(".page").forEach(x=>x.classList.remove("active"));t.classList.add("active");$(t.dataset.page).classList.add("active")});
  $("speak-number").onclick=()=>talk(numberWord(selectedNumber));$("speak-letter").onclick=()=>speakLetter(selectedLetter);$("speak-color").onclick=()=>talk(colors[selectedColor][0],LS_SPD[colors[selectedColor][0]]);
  $("gear").onclick=()=>askAdult(openSettings);$("gate-ok").onclick=gateSubmit;$("gate-cancel").onclick=gateClose;$("gate-in").onkeydown=e=>{if(e.key==="Enter")gateSubmit()};$("pin-save").onclick=pinSave;$("parent-pin").onfocus=function(){if(!this.value)this.type="text"};$("pin-clear").onclick=pinClear;$("close-settings").onclick=()=>$("settings").hidden=true;
  $("settings-normal").onclick=()=>switchSettings("normal");$("settings-advanced").onclick=()=>switchSettings("advanced");$("settings-lock").onclick=()=>switchSettings("lock");  $("learning-volume-level").oninput=()=>{learningVolume=Number($("learning-volume-level").value);$("learning-volume-value").textContent=learningVolume+"%";localStorage.setItem(LEARNING_VOLUME_KEY,String(learningVolume));pushNativePrefs();};
- $("save-settings").onclick=()=>{let v=parseInt(toLatin($("max-number").value),10);if(!Number.isFinite(v))v=maxNumber;v=Math.max(1,Math.min(100,v));maxNumber=v;localStorage.setItem("systemVoice",$("system-voice").checked?"1":"0");localStorage.setItem("voiceSel",String(Math.max(0,Math.min(9,parseInt($("voice-id").value,10)||0))));localStorage.setItem(STEPS_KEY,String(parseInt($("tts-quality").value,10)||8));speechSpeed=Math.max(.6,Math.min(1.2,parseFloat($("speech-speed").value)||.9));features={quiz:features.quiz,gamesTab:$("enable-games-tab").checked};localStorage.setItem(KEY,v);localStorage.setItem(SPEED_KEY,speechSpeed);if($("speed-mode"))localStorage.setItem("speedMode",$("speed-mode").value);localStorage.setItem(LEARNING_VOLUME_KEY,String(learningVolume));pushNativePrefs();schedulePrefetch();localStorage.setItem(FEATURE_KEY,JSON.stringify(features));applyGamesTab();renderNumbers();$("settings").hidden=true;talk("تَمَّ حِفْظُ الإِعْدَادَات",.78)};
+ $("save-settings").onclick=()=>{let v=parseInt(toLatin($("max-number").value),10);if(!Number.isFinite(v))v=maxNumber;v=Math.max(1,Math.min(100,v));maxNumber=v;localStorage.setItem("systemVoice",$("system-voice").checked?"1":"0");localStorage.setItem("voiceSel",String(Math.max(0,Math.min(9,parseInt($("voice-id").value,10)||0))));localStorage.setItem(STEPS_KEY,String(parseInt($("tts-quality").value,10)||8));speechSpeed=Math.max(.6,Math.min(1.2,parseFloat($("speech-speed").value)||.9));features={quiz:features.quiz,gamesTab:$("enable-games-tab").checked,writingTab:$("enable-writing-tab")?$("enable-writing-tab").checked:features.writingTab!==false};localStorage.setItem(KEY,v);localStorage.setItem(SPEED_KEY,speechSpeed);if($("speed-mode"))localStorage.setItem("speedMode",$("speed-mode").value);localStorage.setItem(LEARNING_VOLUME_KEY,String(learningVolume));pushNativePrefs();schedulePrefetch();localStorage.setItem(FEATURE_KEY,JSON.stringify(features));applyGamesTab();if(window.applyWritingTab)window.applyWritingTab();renderNumbers();$("settings").hidden=true;talk("تَمَّ حِفْظُ الإِعْدَادَات",.78)};
 }
 // ---- قفل الكبار: سؤال حسابي عشوائي، أو رمز سري يختاره الكبير. 3 أخطاء = قفل دقيقة ----
 const PIN_KEY="parentPin",PAT_KEY="parentPattern";let gateOkFn=null,gateAns=0,gateBad=0,gateLockUntil=0;
@@ -227,7 +227,7 @@ function applyLive(){
  const f=()=>{applyLive();if(id==="speech-speed"||id==="speed-mode"||id==="voice-id"||id==="tts-quality")schedulePrefetch()};
  e.addEventListener("input",f);e.addEventListener("change",f)});
 // ---- زر «↺ افتراضي» تحت كل إعداد، وزر لإعادة الكل ----
-const SET_DEF={"speech-speed":"0.9","speed-mode":"0","voice-id":"9","tts-quality":"8","system-voice":false,"learning-volume-level":"100","max-number":"10","enable-games-tab":true};
+const SET_DEF={"speech-speed":"0.9","speed-mode":"0","voice-id":"9","tts-quality":"8","system-voice":false,"learning-volume-level":"100","max-number":"10","enable-games-tab":true,"enable-writing-tab":true};
 function resetOne(id){const e=$(id);if(!e)return;if(e.type==="checkbox")e.checked=!!SET_DEF[id];else e.value=SET_DEF[id];e.dispatchEvent(new Event("input",{bubbles:true}));e.dispatchEvent(new Event("change",{bubbles:true}))}
 (function(){const mn=$("max-number"),chips=[].slice.call(document.querySelectorAll("#mn-chips button"));
  let last=10;

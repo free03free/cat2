@@ -31,7 +31,7 @@ S.letters.forEach((L, i) => {
 });
 S.colors.forEach(c => { lintList.push(["word", c[0]]); add(c[0], (S.SAY_SPEED && S.SAY_SPEED[c[0]]) || BASE); });
 for (let n = 1; n <= 100; n++) { const w = S.numberWord(n); lintList.push(["num", w]); add(w, BASE, n); }
-const phrases = ["مَرْحَبًا أَنَا القِطُّ المُتَكَلِّم", "أَحْسَنْتَ", "جَيِّد", "صَحِيح", "خَطَأ", "أَعِدِ المُحَاوَلَةَ مَرَّةً أُخْرَى", "تَمَّ حِفْظُ الإِعْدَادَات", "كَمْ عَدَدُهَا"];
+const phrases = ["مَرْحَبًا أَنَا القِطُّ المُتَكَلِّم", "أَحْسَنْتَ", "جَيِّد", "صَحِيح", "خَطَأ", "أَعِدِ المُحَاوَلَةَ مَرَّةً أُخْرَى", "مُمْتَاز", "رَائِع", "جَمِيل", "حَاوِلْ مَرَّةً أُخْرَى", "تَمَّ حِفْظُ الإِعْدَادَات", "كَمْ عَدَدُهَا"];
 phrases.forEach(p => { lintList.push(["phrase", p]); add(p, BASE); });
 
 const problems = lintAll(lintList);
