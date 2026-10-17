@@ -53,6 +53,7 @@ css.textContent=`
 .wr-hint{text-align:center;font-size:13px;color:#806d60;margin:2px 0 8px}
 .wr-board{position:relative;margin:0 auto;border-radius:20px;background:#fff;border:3px solid #ead8c6;overflow:hidden;box-shadow:inset 0 0 0 1px #fff}
 .wr-board canvas{position:absolute;left:0;top:0;touch-action:none;display:block}
+.wr-tip{text-align:center;font-size:11.5px;color:#a18f82;margin:2px 0 6px}
 .wr-res{min-height:26px;text-align:center;font-weight:900;font-size:16px;color:#4a3426;margin:10px 0 2px}
 .wr-res.pop{animation:wrpop .35s}
 @keyframes wrpop{0%{transform:scale(.8)}60%{transform:scale(1.12)}100%{transform:scale(1)}}
@@ -79,6 +80,7 @@ sec.innerHTML=
 '<div class="wr-hint" id="wr-hint"></div>'+
 '<div class="wr-board" id="wr-board"><canvas id="wr-g"></canvas><canvas id="wr-d"></canvas></div>'+
 '<div class="wr-res" id="wr-res"></div>'+
+'<div class="wr-tip">☝️ للتمرير: اسحب بإصبعين فوق اللوحة، أو بإصبع واحد من الهامش حولها</div>'+
 '<div class="wr-bar"><button id="wr-clear"><span>🗑</span>مسح</button><button id="wr-undo"><span>↩</span>تراجع</button><button id="wr-hear"><span>🔊</span>اسمع</button><button id="wr-check" class="go"><span>✔</span>تحقق</button></div>'+
 '</div>';
 (document.querySelector("main.app")||document.body).appendChild(sec);
@@ -204,7 +206,7 @@ function strokesTo(ctx,w,S){
 }
 function drawInk(){clearCtx(ix);strokesTo(ix,penW(),st.S)}
 function setup(){
- const b=$("wr-board"),host=b.parentNode,w=Math.max(200,Math.min(host.clientWidth-6,440)),d=window.devicePixelRatio||1;
+ const b=$("wr-board"),host=b.parentNode,w=Math.max(200,Math.min(host.clientWidth-44,420)),d=window.devicePixelRatio||1;
  st.S=w;b.style.width=w+"px";b.style.height=w+"px";
  [gc,ic].forEach(c=>{c.width=c.height=Math.round(w*d);c.style.width=c.style.height=w+"px"});
  gx.setTransform(d,0,0,d,0,0);ix.setTransform(d,0,0,d,0,0);
@@ -216,7 +218,7 @@ function mkCanvas(S){const c=document.createElement("canvas");c.width=c.height=S
 function score(){
  const S=Math.round(st.S),it=cur();
  // تغطية: مسار القلم بسُمكه + هامش تساهل صغير
- const cov=mkCanvas(S),cx=cov.getContext("2d");strokesTo(cx,penW()+S*.03,S);
+ const cov=mkCanvas(S),cx=cov.getContext("2d");strokesTo(cx,penW()+S*.02,S);
  const C=cx.getImageData(0,0,S,S).data;
  // حدود مسموحة للخروج: الشكل موسَّعًا قليلًا
  const dil=mkCanvas(S),dx=dil.getContext("2d"),q=fit(dx,it.ch);
@@ -285,7 +287,7 @@ function result(r){
  if(r.cover>=.85&&r.worst>=.75&&r.stray<=.18&&r.extra===0)s=3;
  else if(r.cover>=.68&&r.worst>=.5&&r.stray<=.33)s=2;
  else if(r.cover>=.45&&r.stray<=.55)s=1;
- if(r.extra>0&&s>2)s=2;
+ if((r.extra>0||r.worst<.75)&&s>1)s=1;
  setBest(s);refreshTitle();
  const msgs=[
   "حاول مرة أخرى وتتبّع الشكل ببطء",
@@ -306,14 +308,14 @@ function result(r){
 /* كلمات التشجيع (كلها في الحزمة الجاهزة بسرعة speechSpeed فتُنطق فورًا) */
 const CHEERS={
  3:["أَحْسَنْتَ","مُمْتَاز","رَائِع"],
- 2:["جَيِّد","جَمِيل","أَحْسَنْتَ"],
- 1:["جَيِّد","حَاوِلْ مَرَّةً أُخْرَى"],
+ 2:["جَيِّد","جَمِيل"],
+ 1:["أَعِدِ المُحَاوَلَةَ مَرَّةً أُخْرَى","حَاوِلْ مَرَّةً أُخْرَى"],
  0:["أَعِدِ المُحَاوَلَةَ مَرَّةً أُخْرَى","حَاوِلْ مَرَّةً أُخْرَى"],
- free:["جَيِّد","جَمِيل","أَحْسَنْتَ"]
+ free:[]
 };
 let lastCheer="";
 function cheer(k){
- const a=CHEERS[k]||CHEERS[0];let t=a[Math.floor(Math.random()*a.length)];
+ const a=CHEERS[k]||CHEERS[0];if(!a.length)return;let t=a[Math.floor(Math.random()*a.length)];
  if(a.length>1&&t===lastCheer)t=a[(a.indexOf(t)+1)%a.length];
  lastCheer=t;say(t,pref("speechSpeed",.9));
 }
@@ -358,14 +360,14 @@ $("wr-title").onclick=()=>togglePick();
 $("wr-grid").onclick=e=>{const b=e.target.closest("button");if(!b)return;st.idx=parseInt(b.dataset.i,10)||0;togglePick(false);render(true)};
 
 /* ----- تشجيع مباشر: عند رفع الطفل يده وتوقّفه عن الكتابة، إن بلغت الدقة 95% فأكثر وكان الشكل صحيحًا ----- */
-const AUTO_PCT=95,AUTO_WAIT=900;
+const AUTO_WAIT=700;
 function autoCheck(){
  st.autoT=0;
  if(st.level==="free"||!st.strokes.length||st.cur||st.done)return;
  const r=score();
- if(r.pct>=AUTO_PCT&&r.worst>=.75&&r.extra===0&&r.outLen<=r.S*.1&&r.ink>0){
+ if(r.cover>=.85&&r.worst>=.75&&r.stray<=.18&&r.extra===0&&r.ink>0){
   st.done=true;setBest(3);refreshTitle();buildPick();
-  msg(starsText(3)+"  "+r.pct+"٪  ممتاز! كتابتك صحيحة ودقيقة",true);
+  msg(starsText(3)+"  ممتاز! كتابتك صحيحة ودقيقة",true);
   cheer(3);
  }
 }
@@ -375,13 +377,31 @@ function cancelAuto(){clearTimeout(st.autoT);st.autoT=0}
 /* ----- المؤشر ----- */
 function pt(e){const r=ic.getBoundingClientRect();return [Math.min(1,Math.max(0,(e.clientX-r.left)/r.width)),Math.min(1,Math.max(0,(e.clientY-r.top)/r.height))]}
 ic.addEventListener("pointerdown",e=>{
+ if(e.isPrimary===false||st.multi)return;
  e.preventDefault();try{ic.setPointerCapture(e.pointerId)}catch(x){}
  clearTimeout(st.modelT);cancelAuto();st.done=false;if(st.level==="free")drawGuide();
  st.cur=[pt(e)];st.strokes.push(st.cur);drawInk();msg("");
 });
-ic.addEventListener("pointermove",e=>{if(!st.cur)return;e.preventDefault();st.cur.push(pt(e));drawInk()});
+ic.addEventListener("pointermove",e=>{if(!st.cur||e.isPrimary===false||st.multi)return;e.preventDefault();st.cur.push(pt(e));drawInk()});
 ["pointerup","pointercancel","pointerleave"].forEach(t=>ic.addEventListener(t,()=>{const was=!!st.cur;st.cur=null;if(was)scheduleAuto()}));
-ic.addEventListener("touchstart",e=>e.preventDefault(),{passive:false});
+/* تمرير الصفحة: بإصبعين فوق لوحة الكتابة (أو بإصبع واحد من الهامش حولها) */
+let scrollY0=null;
+const avgY=t=>{let y=0;for(let i=0;i<t.length;i++)y+=t[i].clientY;return y/t.length};
+ic.addEventListener("touchstart",e=>{
+ e.preventDefault();
+ if(e.touches.length>=2){
+  if(st.cur){st.strokes.pop();st.cur=null;drawInk()}
+  st.multi=true;cancelAuto();scrollY0=avgY(e.touches);
+ }
+},{passive:false});
+ic.addEventListener("touchmove",e=>{
+ if(e.touches.length>=2&&scrollY0!==null){
+  e.preventDefault();const y=avgY(e.touches),d=scrollY0-y;scrollY0=y;
+  window.scrollBy(0,d);const se=document.scrollingElement;if(se&&Math.abs(se.scrollTop-(window.pageYOffset||0))>1)se.scrollTop+=d;
+ }
+},{passive:false});
+const endTouch=e=>{if(e.touches.length<2)scrollY0=null;if(e.touches.length===0)st.multi=false};
+ic.addEventListener("touchend",endTouch);ic.addEventListener("touchcancel",endTouch);
 
 /* ----- الأزرار ----- */
 $("wr-kind").onclick=e=>{const b=e.target.closest("button");if(!b)return;st.kind=b.dataset.k;st.idx=0;$("wr-grid").classList.remove("open");
@@ -399,7 +419,7 @@ $("wr-check").onclick=()=>{
   drawGuide(true);msg("قارن كتابتك بالنموذج الأحمر، ثم جرّب مرة أخرى لتصير أجمل",true);cheer("free");
   clearTimeout(st.modelT);st.modelT=setTimeout(()=>drawGuide(),4000);return;
  }
- const r0=score();if(st.done&&r0.pct>=AUTO_PCT)return;result(r0);
+ if(st.done)return;result(score());
 };
 
 /* ----- الدخول والخروج من القسم ----- */
