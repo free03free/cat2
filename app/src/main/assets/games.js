@@ -280,9 +280,27 @@ function targetArgs(){
  if(k==="match"||k==="matchl")return gm.dir==="pic"?nameArgs(gm.t):(gm.word?wordArgsW(gm.word):wordArgs(gm.t));
  return[numberWord(gm.t),BASE];
 }
-function speakTarget(){if(!gm)return;const a=targetArgs();say(a[0],a[1])}
+/* في المطابقة يُنطق الاثنان معًا من البداية: «كرسي، كاف» (صورة←حرف) و«صاد، صحن» (حرف←صورة) */
+async function speakTarget(){
+ if(!gm)return;
+ if(gm.kind==="match"||gm.kind==="matchl"){
+  const tok=gm.spk=(gm.spk||0)+1,a0=gm.act;
+  for(const p of reinforceArgs()){
+   await sayWait(p[0],p[1],3500);
+   if(!gm||gm.spk!==tok||gm.act!==a0||gm.locked)return;
+  }
+  return;
+ }
+ const a=targetArgs();say(a[0],a[1]);
+}
 /* في العدّ والمطابقة لم يسمع الطفل المطلوب قبل الجواب، فنُسمعه بعد الإجابة الصحيحة تثبيتًا للتعلم */
-const reinforce=()=>gm.count||gm.kind==="match"||gm.kind==="matchl";
+const reinforce=()=>gm.count;
+/* بعد الإجابة الصحيحة في المطابقة يُنطق الزوج معًا: «صاد ← صحن» (حرف ثم كلمة) أو «كرسي ← كاف» (كلمة ثم حرف) */
+function reinforceArgs(){
+ if(gm.kind==="match")return[nameArgs(gm.t),wordArgsW(gm.word)];
+ if(gm.kind==="matchl")return[wordArgsW(gm.word),nameArgs(gm.t)];
+ return targetArgs();
+}
 
 const qArgs=()=>[Q[gm.kind]||"",BASE];
 function tapObj(sp){
@@ -387,7 +405,7 @@ async function roundDone(a,pre,praise){
  const go=()=>{if(moved||!alive())return;moved=true;gm.round++;hud();next()};
  const wd=setTimeout(go,9000);
  try{
-  if(pre){await sayWait(pre[0],pre[1],3500);if(!alive()){clearTimeout(wd);return}}
+  if(pre){const L=Array.isArray(pre[0])?pre:[pre];for(const p of L){await sayWait(p[0],p[1],3500);if(!alive()){clearTimeout(wd);return}}}
   await sayWait(praise,BASE,3000);if(!alive()){clearTimeout(wd);return}
  }catch(e){}
  await sleep(250);clearTimeout(wd);
@@ -400,7 +418,7 @@ function answer(btn,ok){
  if(!ok){wrong(btn,a);return}
  btn.classList.add("gms-right");
  if(gm.tries===0)gm.score++;
- roundDone(a,reinforce()?targetArgs():null,praiseFor(gm.tries));
+ roundDone(a,reinforce()?reinforceArgs():null,praiseFor(gm.tries));
 }
 function finish(){
  const a=++gm.act;gm.locked=true;
